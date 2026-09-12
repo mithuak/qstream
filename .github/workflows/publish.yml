@@ -21,17 +21,18 @@ jobs:
           enable-cache: true
 
       - name: Set up Python
-        run: uv python install 3.12
+        run: uv python install 3.12 3.14
 
       - name: Set up Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Build wheel
+      - name: Build wheels
         run: |
           BASE=$(python3 -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')
           SNAP="${BASE%%.dev*}.dev${GITHUB_RUN_ID}${GITHUB_RUN_ATTEMPT}"
           sed -i -E "0,/^version = .*/ s//version = \"$SNAP\"/" pyproject.toml
           uv build --wheel --python 3.12
+          uv build --wheel --python 3.14
 
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
@@ -39,7 +40,7 @@ jobs:
           role-to-assume: arn:aws:iam::572493397591:role/cicd-github-actions
           aws-region: us-west-2
 
-      - name: Publish wheel to CodeArtifact
+      - name: Publish wheels to CodeArtifact
         run: |
           ACCT=$(aws sts get-caller-identity --query Account --output text)
           TOKEN=$(aws codeartifact get-authorization-token --domain cicd --domain-owner "$ACCT" --query authorizationToken --output text)
