@@ -1,0 +1,48 @@
+name: build-publish
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  build-publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Set up Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build wheel
+        run: |
+          BASE=$(python3 -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')
+          SNAP="${BASE%%.dev*}.dev${GITHUB_RUN_ID}${GITHUB_RUN_ATTEMPT}"
+          sed -i -E "0,/^version = .*/ s//version = \"$SNAP\"/" pyproject.toml
+          uv build --wheel --python 3.12
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::572493397591:role/cicd-github-actions
+          aws-region: us-west-2
+
+      - name: Publish wheel to CodeArtifact
+        run: |
+          ACCT=$(aws sts get-caller-identity --query Account --output text)
+          TOKEN=$(aws codeartifact get-authorization-token --domain cicd --domain-owner "$ACCT" --query authorizationToken --output text)
+          URL=$(aws codeartifact get-repository-endpoint --domain cicd --domain-owner "$ACCT" --repository pip-repo --format pypi --query repositoryEndpoint --output text)
+          echo "::add-mask::$TOKEN"
+          uv publish --publish-url "$URL" --username aws --password "$TOKEN" dist/*.whl
