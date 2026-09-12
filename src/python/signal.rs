@@ -51,6 +51,14 @@ fn parse_window(s: &str) -> PyResult<WindowKind> {
 // ---------------------------------------------------------------------------
 
 /// Savitzky-Golay polynomial smoothing over a rolling window.
+///
+/// ```text
+/// y_t = sum_{k=-m}^{m} c_k x_{t+k}
+/// c = (A^T A)^{-1} A^T   (least-squares fit of a polynomial of order p)
+/// ```
+///
+/// Fits a low-order polynomial in a sliding odd window and evaluates it (or
+/// its `deriv`-th derivative) at the center.
 #[pyclass(module = "qstream")]
 pub struct SavitzkyGolay {
     inner: CoreSG,
@@ -97,6 +105,13 @@ impl SavitzkyGolay {
 }
 
 /// Kolmogorov-Zurbenko filter (cascaded moving averages).
+///
+/// ```text
+/// y_t = MA_w^p (x_t)     # p passes of a w-point moving average
+/// ```
+///
+/// Repeated moving-average smoothing removes high-frequency noise while
+/// preserving the low-frequency trend with a sharp transition band.
 #[pyclass(module = "qstream")]
 pub struct KolmogorovZurbenko {
     inner: CoreKZ,
@@ -134,6 +149,14 @@ impl KolmogorovZurbenko {
 }
 
 /// Local (Wiener2-style) adaptive denoiser.
+///
+/// ```text
+/// y = mu + max(0, sigma^2 - nu^2) / sigma^2 * (x - mu)
+/// ```
+///
+/// Per-pixel (per-sample) Wiener filtering: estimates local mean `mu` and
+/// variance `sigma^2`, and shrinks toward the mean by the estimated
+/// noise variance `nu^2`.
 #[pyclass(module = "qstream")]
 pub struct WienerFilter {
     inner: CoreWiener,
@@ -173,6 +196,14 @@ impl WienerFilter {
 /// Adaptive notch filter frequency estimator. Locks onto and suppresses a
 /// dominant sinusoid, returning the estimated normalized frequency (cycles per
 /// sample) and the notched output each tick.
+///
+/// ```text
+/// H(z) = (1 - 2 rho cos(w0) z^{-1} + rho^2 z^{-2})
+///        / (1 - 2 rho cos(w0_hat) z^{-1} + rho^2 z^{-2})
+/// w0_hat <- w0_hat - mu * dE/dw0_hat      (gradient descent)
+/// ```
+///
+/// A second-order notch with a gradient-adapted center frequency `w0_hat`.
 #[pyclass(module = "qstream")]
 pub struct AdaptiveNotchFilter {
     inner: CoreAdaptiveNotch,
@@ -215,6 +246,15 @@ impl AdaptiveNotchFilter {
 // ---------------------------------------------------------------------------
 
 /// Alpha-beta (g-h) tracker.
+///
+/// ```text
+/// x_hat <- x_hat + alpha * (z - x_hat)
+/// v_hat <- v_hat + (beta / dt) * (z - x_hat)
+/// x_pred = x_hat + v_hat * dt
+/// ```
+///
+/// Constant-gain state estimator; a fixed-coefficient special case of the
+/// Kalman filter.
 #[pyclass(module = "qstream")]
 pub struct AlphaBetaTracker {
     inner: CoreAlphaBeta,
@@ -245,6 +285,17 @@ impl AlphaBetaTracker {
 }
 
 /// Linear Kalman filter (constant-velocity model) tracking a scalar series.
+///
+/// ```text
+/// x_pred = F x_est
+/// P_pred = F P_est F^T + Q
+/// K = P_pred H^T (H P_pred H^T + R)^{-1}
+/// x_est = x_pred + K (z - H x_pred)
+/// P_est = (I - K H) P_pred
+/// ```
+///
+/// Optimal linear state estimator for a constant-velocity (position +
+/// velocity) motion model.
 #[pyclass(module = "qstream")]
 pub struct KalmanFilter {
     inner: CoreKalman,
@@ -275,6 +326,13 @@ impl KalmanFilter {
 }
 
 /// Adaptive 1-D Kalman filter with online measurement-noise estimation.
+///
+/// ```text
+/// R_hat <- R_hat + adapt * (v^2 - P_pred - R_hat)
+/// ```
+///
+/// Standard Kalman update where the measurement-noise variance `R` is
+/// re-estimated online from the innovation `v = z - H x_pred`.
 #[pyclass(module = "qstream")]
 pub struct AdaptiveKalman {
     inner: CoreAdaptiveKalman,
@@ -309,6 +367,14 @@ impl AdaptiveKalman {
 }
 
 /// Scalar square-root (covariance-factor) Kalman filter.
+///
+/// ```text
+/// P = S * S^T     (covariance factor)
+/// S_est = sqrt((1 - K H) S_pred^2 + K^2 R)
+/// ```
+///
+/// Propagates the square-root of the covariance instead of the covariance
+/// itself for improved numerical stability.
 #[pyclass(module = "qstream")]
 pub struct SquareRootKalman {
     inner: CoreSqrtKalman,
@@ -339,6 +405,15 @@ impl SquareRootKalman {
 }
 
 /// Unscented Kalman filter (constant-velocity model).
+///
+/// ```text
+/// X_i = mean +/- sqrt((n+kappa) P)   (sigma points)
+/// Y_i = f(X_i)
+/// mean = sum w_i Y_i ; P = sum w_i (Y_i - mean)(Y_i - mean)^T + Q
+/// ```
+///
+/// Deterministic sampling (unscented transform) of a nonlinear state model;
+/// accurate to second order for the propagated mean/covariance.
 #[pyclass(module = "qstream")]
 pub struct UnscentedKalman {
     inner: CoreUKF,
@@ -370,6 +445,17 @@ impl UnscentedKalman {
 }
 
 /// Extended Kalman filter (constant-velocity model, analytic Jacobian).
+///
+/// ```text
+/// x_pred = f(x_est)
+/// F = df/dx |_{x_est}     (Jacobian)
+/// P_pred = F P_est F^T + Q
+/// K = P_pred H^T (H P_pred H^T + R)^{-1}
+/// x_est = x_pred + K (z - h(x_pred))
+/// ```
+///
+/// Kalman filter linearized around the current estimate; handles mildly
+/// nonlinear state/measurement models.
 #[pyclass(module = "qstream")]
 pub struct ExtendedKalman {
     inner: CoreEKF,
@@ -401,6 +487,15 @@ impl ExtendedKalman {
 }
 
 /// LMS adaptive one-step predictor.
+///
+/// ```text
+/// y_t = w^T x
+/// e_t = x_t - y_t
+/// w <- w + 2 mu e_t x
+/// ```
+///
+/// Least-mean-squares adaptive FIR filter; cheap stochastic gradient descent
+/// on the mean-squared prediction error.
 #[pyclass(module = "qstream")]
 pub struct LmsFilter {
     inner: CoreLms,
@@ -441,6 +536,17 @@ impl LmsFilter {
 }
 
 /// RLS adaptive one-step predictor.
+///
+/// ```text
+/// K = P x / (lambda + x^T P x)
+/// e = x_t - w^T x
+/// w <- w + K e
+/// P <- (P - K x^T P) / lambda
+/// ```
+///
+/// Recursive least squares: exact (not stochastic) minimization of the
+/// exponentially-weighted squared prediction error with forgetting factor
+/// `lambda`.
 #[pyclass(module = "qstream")]
 pub struct RlsFilter {
     inner: CoreRls,
@@ -489,6 +595,14 @@ impl RlsFilter {
 // ---------------------------------------------------------------------------
 
 /// Page-Hinkley change detector.
+///
+/// ```text
+/// S_t = S_{t-1} + (x_t - mu_t - delta)
+/// M_t = min_{s<=t} S_s
+/// changed = (S_t - M_t) > threshold
+/// ```
+///
+/// Cumulative-sum change detector for a drift in the mean of a stream.
 #[pyclass(module = "qstream")]
 pub struct PageHinkley {
     inner: CorePageHinkley,
@@ -519,6 +633,13 @@ impl PageHinkley {
 }
 
 /// Teager-Kaiser energy operator (one-step delayed).
+///
+/// ```text
+/// Psi[x_t] = x_{t-1}^2 - x_t x_{t-2}
+/// ```
+///
+/// Discrete energy operator; for a sinusoid of amplitude A and frequency f it
+/// returns roughly A^2 sin^2(2 pi f).
 #[pyclass(module = "qstream")]
 pub struct TeagerKaiser {
     inner: CoreTeagerKaiser,
@@ -553,6 +674,13 @@ impl TeagerKaiser {
 }
 
 /// Zero-crossing rate over a rolling window.
+///
+/// ```text
+/// zcr = (1 / N) * sum_t 1[ x_{t-1} x_t < 0 or |x_t| < threshold ]
+/// ```
+///
+/// Fraction of samples that cross (or lie within a threshold of) zero; a
+/// coarse estimate of the dominant frequency.
 #[pyclass(module = "qstream")]
 pub struct ZeroCrossingRate {
     inner: CoreZeroCrossing,
@@ -634,20 +762,27 @@ macro_rules! spectral_indicator {
     };
 }
 
-spectral_indicator!(WelchPsd, CoreWelch, "Welch overlapped-periodogram PSD.");
-spectral_indicator!(Periodogram, CorePeriodogram, "Single-window periodogram.");
+spectral_indicator!(WelchPsd, CoreWelch, "Welch overlapped-periodogram PSD.\n\n```text\nP(f) = (1/K) * sum_k |X_k(f)|^2 / (fs * sum w^2)\n```\n\nAverages K windowed (typically Hann) segments with overlap to reduce variance; `update_every` controls the recompute cadence.");
+spectral_indicator!(Periodogram, CorePeriodogram, "Single-window periodogram.\n\n```text\nP(f) = |X(f)|^2 / (fs * sum w^2)\n```\n\nRaw power estimate of one window; high variance but unbiased.");
 spectral_indicator!(
     FftSpectralDensity,
     CoreFftSpectral,
-    "FFT spectral density (windowed periodogram)."
+    "FFT spectral density (windowed periodogram).\n\n```text\nS(f) = 2 * |X(f)|^2 / (fs * sum w^2)\n```\n\nOne-sided density with a user-selectable taper (default Hann)."
 );
 spectral_indicator!(
     BartlettMethod,
     CoreBartlett,
-    "Bartlett averaged-segment periodogram."
+    "Bartlett averaged-segment periodogram.\n\n```text\nP(f) = (1/K) * sum_k |X_k(f)|^2 / (fs * sum w^2)\n```\n\nAverages non-overlapping segments, reducing variance at the cost of resolution."
 );
 
 /// Goertzel DFT at a set of target normalized frequencies.
+///
+/// ```text
+/// s_k = x_t + 2 cos(2 pi f_k) s_{k-1} - s_{k-2}
+/// |X(f_k)|^2 = s_k^2 + s_{k-1}^2 - 2 cos(2 pi f_k) s_k s_{k-1}
+/// ```
+///
+/// Efficient single-bin DFT recursion; ideal for detecting a few known tones.
 #[pyclass(module = "qstream")]
 pub struct Goertzel {
     inner: CoreGoertzel,
@@ -680,6 +815,13 @@ impl Goertzel {
 }
 
 /// Autoregressive (Burg) spectral density.
+///
+/// ```text
+/// P(f) = sigma^2 / |1 + sum_{i=1}^{p} a_i e^{-j 2 pi f i}|^2
+/// ```
+///
+/// AR(p) spectrum from Burg reflection coefficients and the prediction-error
+/// variance `sigma^2`.
 #[pyclass(module = "qstream")]
 pub struct ArSpectrum {
     inner: CoreArSpectrum,
@@ -710,6 +852,13 @@ impl ArSpectrum {
 }
 
 /// Blackman-Tukey spectral estimation (FFT of lag-windowed autocorrelation).
+///
+/// ```text
+/// P(f) = sum_{h=-M}^{M} w_h r_h e^{-j 2 pi f h}
+/// ```
+///
+/// Fourier transform of the lag-windowed autocorrelation `r_h` with a
+/// triangular (Bartlett) lag window `w_h`.
 #[pyclass(module = "qstream")]
 pub struct BlackmanTukey {
     inner: CoreBlackmanTukey,
@@ -737,6 +886,13 @@ impl BlackmanTukey {
 }
 
 /// Thomson multitaper PSD (DPSS tapers).
+///
+/// ```text
+/// P(f) = (1/K) * sum_{k=1}^{K} |sum_t v_k[t] x_t e^{-j 2 pi f t}|^2
+/// ```
+///
+/// Averages K eigenspectra computed with orthogonal Slepian (DPSS) tapers
+/// `v_k`, minimizing leakage and variance.
 #[pyclass(module = "qstream")]
 pub struct MultitaperPsd {
     inner: CoreMultitaper,
@@ -801,10 +957,17 @@ macro_rules! cross_spectral_indicator {
     };
 }
 
-cross_spectral_indicator!(CrossSpectrum, CoreCrossSpectrum, "Cross-spectral density magnitude.");
-cross_spectral_indicator!(Coherence, CoreCoherence, "Magnitude-squared coherence.");
+cross_spectral_indicator!(CrossSpectrum, CoreCrossSpectrum, "Cross-spectral density magnitude.\n\n```text\n|S_xy(f)| = |E[X(f) Y*(f)]| / (fs * sum w^2)\n```\n\nWelch-averaged cross-spectrum between two streams.");
+cross_spectral_indicator!(Coherence, CoreCoherence, "Magnitude-squared coherence.\n\n```text\ngamma^2(f) = |S_xy(f)|^2 / (S_xx(f) * S_yy(f))\n```\n\nValues in [0, 1]; 1 means perfect linear relationship at frequency f.");
 
 /// Compute spectral-shape features from a [`SpectrumResult`].
+///
+/// ```text
+/// centroid = sum f P(f) / sum P(f)
+/// entropy  = -sum p log p / log N
+/// flatness = exp(mean log P) / mean P
+/// rolloff  = f where cumulative energy reaches 85%
+/// ```
 #[pyfunction]
 pub fn spectral_shape(spectrum: &SpectrumResult) -> SpectralShapeResult {
     let core = spectral::SpectrumResult {
@@ -820,9 +983,15 @@ pub fn spectral_shape(spectrum: &SpectrumResult) -> SpectralShapeResult {
 // Time-frequency (STFT / Hilbert)
 // ---------------------------------------------------------------------------
 
-/// Short-Time Fourier Transform producing a running spectrogram. Each hop
-/// returns the magnitude spectrum of the current window; call `.spectrogram()`
-/// for the accumulated time-frequency matrix `(frames, bins, flat_values)`.
+/// Short-Time Fourier Transform producing a running spectrogram.
+///
+/// ```text
+/// X(t, f) = sum_k w[k] x_{t+k} e^{-j 2 pi f k}
+/// ```
+///
+/// Each hop returns the magnitude spectrum of the current windowed frame;
+/// `.spectrogram()` returns the accumulated time-frequency matrix
+/// `(frames, bins, flat_values)`.
 #[pyclass(module = "qstream")]
 pub struct ShortTimeFourierTransform {
     inner: CoreStft,
@@ -863,9 +1032,17 @@ impl ShortTimeFourierTransform {
     }
 }
 
-/// Hilbert transform (analytic signal). On each cadence returns the
-/// instantaneous amplitude (envelope), phase, and frequency at the window
-/// center.
+/// Hilbert transform (analytic signal).
+///
+/// ```text
+/// z_t = x_t + j H[x_t]
+/// amplitude = |z_t|
+/// phase = arg(z_t)
+/// frequency = d(phase)/dt
+/// ```
+///
+/// On each cadence returns the instantaneous amplitude (envelope), phase, and
+/// frequency at the window center.
 #[pyclass(module = "qstream")]
 pub struct HilbertTransform {
     inner: CoreHilbert,
@@ -897,8 +1074,14 @@ impl HilbertTransform {
     }
 }
 
-/// Instantaneous frequency via the Hilbert analytic signal (convenience alias
-/// over [`HilbertTransform`]); returns the frequency at the window center.
+/// Instantaneous frequency via the Hilbert analytic signal.
+///
+/// ```text
+/// f_t = (1 / 2 pi) * d(arg(x_t + j H[x_t])) / dt
+/// ```
+///
+/// Convenience alias over [`HilbertTransform`]; returns the frequency at the
+/// window center.
 #[pyclass(module = "qstream")]
 pub struct InstantaneousFrequency {
     inner: CoreHilbert,
@@ -971,22 +1154,30 @@ macro_rules! wavelet_indicator {
     };
 }
 
-wavelet_indicator!(Modwt, CoreModwt, 3, "MODWT detail coefficients per scale.");
+wavelet_indicator!(Modwt, CoreModwt, 3, "MODWT detail coefficients per scale.\n\n```text\nW_j,t = sum_k h_j[k] * x_{t-k}\n```\n\nUndecimated (shift-invariant) wavelet detail coefficients at dyadic scales j.");
 wavelet_indicator!(
     MultiresolutionAnalysis,
     CoreMra,
     3,
-    "Wavelet multiresolution analysis per scale."
+    "Wavelet multiresolution analysis per scale.\n\n```text\nx_t = A_J,t + sum_{j<=J} D_j,t\n```\n\nDecomposes the signal into approximation (A) and detail (D) components at dyadic scales."
 );
 wavelet_indicator!(
     WaveletVariance,
     CoreWaveletVariance,
     3,
-    "Wavelet variance per scale (MODWT)."
+    "Wavelet variance per scale (MODWT).\n\n```text\nsigma^2_j = Var(W_j)\n```\n\nVariance of MODWT coefficients, partitioning total variance across scales."
 );
-wavelet_indicator!(WaveletPacket, CoreWaveletPacket, 2, "Haar wavelet packet decomposition.");
+wavelet_indicator!(WaveletPacket, CoreWaveletPacket, 2, "Haar wavelet packet decomposition.\n\n```text\nW_j,b = sum_k h[k] * x_{t-k}\n```\n\nFull binary tree of wavelet coefficients (approximation + detail at every node).");
 
 /// Haar discrete wavelet transform over a rolling power-of-two window.
+///
+/// ```text
+/// a_j[k] = (a_{j-1}[2k] + a_{j-1}[2k+1]) / sqrt(2)
+/// d_j[k] = (a_{j-1}[2k] - a_{j-1}[2k+1]) / sqrt(2)
+/// ```
+///
+/// Decimated two-channel filter bank; returns approximation `a` and detail `d`
+/// coefficients at dyadic scales.
 #[pyclass(module = "qstream")]
 pub struct DiscreteWaveletTransform {
     inner: CoreDwt,
@@ -1014,6 +1205,14 @@ impl DiscreteWaveletTransform {
 }
 
 /// Morlet continuous wavelet transform evaluated at the latest sample.
+///
+/// ```text
+/// W(a) = sum_t x_t * (1/sqrt(a)) psi*((t - tau)/a)
+/// psi(t) = pi^{-1/4} e^{j w0 t} e^{-t^2/2}
+/// ```
+///
+/// Inner product of the signal with a scaled Morlet mother wavelet at the
+/// given dyadic scales `a`.
 #[pyclass(module = "qstream")]
 pub struct CwtMorlet {
     inner: CoreCwtMorlet,
@@ -1074,14 +1273,22 @@ macro_rules! cross_wavelet_indicator {
     };
 }
 
-cross_wavelet_indicator!(WaveletCorrelation, CoreWaveletCorrelation, "Wavelet correlation per scale.");
-cross_wavelet_indicator!(WaveletCoherence, CoreWaveletCoherence, "Wavelet coherence per scale.");
+cross_wavelet_indicator!(WaveletCorrelation, CoreWaveletCorrelation, "Wavelet correlation per scale.\n\n```text\nrho_j = Cov(W_x_j, W_y_j) / (sigma_x_j * sigma_y_j)\n```\n\nPer-scale correlation between the MODWT coefficients of two streams.");
+cross_wavelet_indicator!(WaveletCoherence, CoreWaveletCoherence, "Wavelet coherence per scale.\n\n```text\nC_j = |sum W_x_j * W_y_j*|^2 / (sum |W_x_j|^2 * sum |W_y_j|^2)\n```\n\nPer-scale magnitude-squared coherence in [0, 1].");
 
 // ---------------------------------------------------------------------------
 // Prediction
 // ---------------------------------------------------------------------------
 
 /// Streaming LPC / Levinson-Durbin predictor.
+///
+/// ```text
+/// x_t = sum_{i=1}^{p} a_i x_{t-i} + e_t
+/// prediction = sum_i a_i x_{t-i}
+/// ```
+///
+/// Linear predictive coding: AR(p) coefficients via Levinson-Durbin, with the
+/// one-step prediction output every tick.
 #[pyclass(module = "qstream")]
 pub struct LpcPredictor {
     inner: CoreLpc,
@@ -1116,6 +1323,15 @@ impl LpcPredictor {
 }
 
 /// Lattice prediction-error filter (outputs the whitened residual).
+///
+/// ```text
+/// f_m = f_{m-1} - k_m b_{m-1}
+/// b_m = b_{m-1} - k_m f_{m-1}
+/// residual = f_p = x_t - sum_i a_i x_{t-i}
+/// ```
+///
+/// Forward/backward lattice recursion driven by Burg reflection coefficients
+/// `k_m`; outputs the order-p forward prediction error.
 #[pyclass(module = "qstream")]
 pub struct LatticePredictionErrorFilter {
     inner: CoreLattice,
@@ -1160,6 +1376,14 @@ impl LatticePredictionErrorFilter {
 }
 
 /// Levinson-Durbin recursion on an autocorrelation vector (batch helper).
+///
+/// ```text
+/// r_m = r_xx(m) - sum_{i=1}^{m-1} a_i r_xx(m-i)
+/// k_m = r_m / e_{m-1}
+/// e_m = e_{m-1} (1 - k_m^2)
+/// ```
+///
+/// Returns `(ar_coefficients, error_variance, reflection_coefficients)`.
 #[pyfunction]
 #[pyo3(signature = (acf, order))]
 pub fn levinson_durbin(acf: Vec<f64>, order: usize) -> PyResult<(Vec<f64>, f64, Vec<f64>)> {
@@ -1173,6 +1397,13 @@ pub fn levinson_durbin(acf: Vec<f64>, order: usize) -> PyResult<(Vec<f64>, f64, 
 }
 
 /// Burg AR estimation on a data window (batch helper).
+///
+/// ```text
+/// k_m = 2 sum e_f[t] e_b[t-1] / sum (e_f[t]^2 + e_b[t-1]^2)
+/// ```
+///
+/// Returns `(ar_coefficients, reflection_coefficients)` from the forward and
+/// backward prediction errors.
 #[pyfunction]
 #[pyo3(signature = (data, order))]
 pub fn burg_ar(data: Vec<f64>, order: usize) -> PyResult<(Vec<f64>, Vec<f64>)> {

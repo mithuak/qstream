@@ -14,8 +14,7 @@ both live per-tick updates and batch iteration.
 
 Built from `design.md`; the function catalog mirrors the companion workbook
 `low_latency_finance_signal_api.xlsx`. **Every function listed in the workbook
-is implemented** except the heavy/experimental Phase-7 items, which are
-explicitly listed as "deferred" at the end of this README.
+is implemented**, including all heavy/experimental Phase-7 items.
 
 ## Install
 
@@ -187,6 +186,17 @@ indicators, and `reset()`. Inputs are validated: `NaN`/`Inf` raise `ValueError`.
 - `BlackmanTukey(window, max_lag, update_every)` — lag-windowed ACF FFT
 - `MultitaperPsd(window, nw, tapers, update_every)` — Thomson DPSS averaging
 - `CrossSpectrum(window, update_every, ...)`, `Coherence(window, update_every, ...)`
+- `CepstralAnalysis(window, update_every)` — real cepstrum `IFFT(log|FFT(x)|)`
+- `DaniellPeriodogram(window, m, update_every)` — smoothed periodogram
+- `EigenvectorFrequencyEstimator(window, order, nfft, update_every)` — pseudospectrum
+- `ModifiedCovarianceArSpectrum(window, order, nfft, update_every)` — forward-backward AR
+- `MultipleCoherence(window, nw, tapers, update_every)` — multitaper coherence
+- `MultivariateSpectralAnalysis(window, embedding, nfft, update_every)` — delay-embedding PSD
+- `ParzenPeriodogram(window, update_every)` — Parzen-windowed periodogram
+- `PartialCoherence(window, update_every)` — lag-conditional coherence
+- `SpectralEnvelope(window, cepstral_order, update_every)` — cepstral-smoothed envelope
+- `WienerHopfFilter(window, order, update_every)` — optimal FIR smoother
+- `ApesSpectrum(window, order, nfft, update_every)` — Capon APES amplitude spectrum
 - Spectral estimators return `SpectrumResult(frequencies, power, dominant_frequency, peak_power)`
 - `spectral_shape(spectrum)` → `SpectralShapeResult(centroid, bandwidth, entropy, rolloff, flatness, dominant_frequency)`
 - `window_type` ∈ `{rectangular, hann, hamming, blackman, blackmanharris}`
@@ -279,8 +289,8 @@ Python→Rust (`bench/latency.py`, release build): a single scalar `update` cost
 ## Testing
 
 ```bash
-cargo test --no-default-features       # 81 pure-Rust unit tests
-python -m pytest                       # 103 Python reference/streaming tests
+cargo test --no-default-features       # 140 pure-Rust unit tests
+python -m pytest                       # 161 Python reference/streaming tests
 ```
 
 Test coverage: deterministic reference value, streaming-vs-reference, warm-up,
@@ -288,13 +298,17 @@ reset, NaN/Inf validation, long-run stability, FeatureEngine grouping,
 `update_many` batch equivalence. Python reference checks use **pure-Python
 math only** — NumPy/SciPy/pandas are never required, even in tests.
 
-Current state: **81/81 Rust tests pass** and **103/103 Python tests pass**.
+Current state: **140/140 Rust tests pass** and **161/161 Python tests pass**.
+
+Every exposed function class carries a Python docstring (`__doc__`) with the
+underlying mathematical formula, so `help(qstream.SomeClass)` shows the model
+or estimator definition directly.
 
 ## Deliverables checklist (per `design.md` §15)
 
 - ✅ Python API documented (this README + full reference).
 - ✅ No required NumPy/pandas/SciPy dependency.
-- ✅ Rust implementation passes reference tests (81/81 Rust, 103/103 Python).
+- ✅ Rust implementation passes reference tests (140/140 Rust, 161/161 Python).
 - ✅ Streaming state bounded or clearly documented (`RingBuffer`-backed;
   recursion state fixed-size).
 - ✅ No avoidable allocation in hot path (Tier-A indicators + specialized
@@ -320,33 +334,34 @@ The only items not yet implemented are the design’s **Phase 7 heavy/experiment
 items (those that the design itself flags as feature-gated / experimental until
 validated). They are listed below.
 
-## Deferred — design Phase 7 (heavy / experimental)
+## Phase 7 — heavy / experimental
 
-These are intentionally deferred. They are perfect candidates to add behind the
-`experimental` cargo feature and/or extended models for EKF/UKF; the
-primitives they need (`DMat` solver, radix-2 FFT, DPSS tapers, Burg /
-Levinson-Durbin) are already implemented, so they would be incremental work.
+These are implemented and available in the main library (no feature gate).
+They are Tier C: heavy computation runs on an `update_every` cadence and
+returns `None` on ticks where no computation ran.
 
-- **Spectral (heavy):** MUSIC, ESPRIT, Matrix Pencil, Capon MVDR/APES,
-  Minimum-Norm, Pisarenko, Prony
-- **Decomposition:** VMD, EMD / Hilbert-Huang, LMD, Matching Pursuit,
-  Synchrosqueezing
-- **Higher-order spectra:** bispectrum, bicoherence, higher-order cumulants
-- **Cycle / adaptive:** PLL
-- **Blind source separation:** FastICA
-- **Time-frequency:** reassigned spectrogram, Stockwell S-transform, fractional
-  Fourier, Wigner-Ville / Cohen class, constant-Q transform, chirp-Z zoom,
-  Kurtogram spectral kurtosis
-- **Wavelets (specialized):** dual-tree complex, empirical (Gilles), tunable-Q,
-  SureShrink, stationary (undecimated) denoising, cross-wavelet, wavelet phase
-  synchrony, wavelet regression
-- **Realized volatility:** realized kernel with microstructure-noise correction,
-  two-scale realized variance
-- **Tail risk:** Entropic VaR (EVaR), EVT POT/GPD VaR and ES, Johnson-SU VaR,
-  Spectral Risk Measure (exponential)
-- **Portfolio optimizers:** Maximum Diversification, Exponentially Weighted Portfolio
-  (periodic-optimization path)
-- **Volatility derivatives:** Fleming-Ostdiek-Whaley VIX, Vandermeer VIX,
-  Demeterfi variance-swap replication
-- **Particle / ensemble Kalman:** bootstrap particle filter, ensemble Kalman,
-  cubature Kalman
+- **Spectral (heavy):** `MusicSpectrum`, `EspritSpectrum`,
+  `MatrixPencilSpectrum`, `CaponSpectrum`, `MinimumNormSpectrum`,
+  `PisarenkoSpectrum`, `PronySpectrum`
+- **Decomposition:** `VmdDecomposition`, `EmdDecomposition`,
+  `LmdDecomposition`, `MatchingPursuitDecomposition`,
+  `SynchrosqueezingTransform`
+- **Higher-order spectra:** `BispectrumAnalysis`, `BicoherenceAnalysis`,
+  `HigherOrderCumulants`
+- **Cycle / adaptive:** `PhaseLockedLoop`
+- **Blind source separation:** `FastICA`
+- **Time-frequency:** `StockwellTransform`, `ReassignedSpectrogram`,
+  `ConstantQTransform`, `FractionalFourierTransform`,
+  `WignerVilleDistribution`, `ChirpZTransform`, `KurtogramAnalysis`
+- **Wavelets (specialized):** `DualTreeCwt`, `EmpiricalWaveletTransform`,
+  `TunableQWavelet`, `SureShrinkDenoise`, `StationaryWaveletDenoise`,
+  `CrossWaveletTransform`, `WaveletPhaseSynchrony`, `WaveletRegression`
+- **Realized volatility:** `RealizedKernel`, `TwoScaleRealizedVariance`
+- **Tail risk:** `EntropicVaR`, `EVTGpdTailRisk`, `JohnsonSUVaR`,
+  `SpectralRiskMeasure`
+- **Portfolio optimizers:** `MaxDiversification`,
+  `ExponentiallyWeightedPortfolio`
+- **Volatility derivatives:** `FlemingOstdiekWhaleyVIX`, `VandermeerVIX`,
+  `DemeterfiVarianceSwap`
+- **Particle / ensemble Kalman:** `ParticleFilter`, `EnsembleKalman`,
+  `CubatureKalman`

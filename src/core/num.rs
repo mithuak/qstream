@@ -59,3 +59,15 @@ impl std::ops::Mul for Complex {
         }
     }
 }
+
+impl std::ops::Div for Complex {
+    type Output = Complex;
+    #[inline]
+    fn div(self, rhs: Complex) -> Complex {
+        let denom = rhs.norm_sqr();
+        Complex {
+            re: (self.re * rhs.re + self.im * rhs.im) / denom,
+            im: (self.im * rhs.re - self.re * rhs.im) / denom,
+        }
+    }
+}

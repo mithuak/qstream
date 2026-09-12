@@ -2,9 +2,12 @@
 //! FeatureEngine. Python is the control/API layer; computation lives in Rust.
 
 pub mod engine;
+pub mod experimental;
 pub mod finance;
+pub mod finance_experimental;
 pub mod result_types;
 pub mod signal;
+pub mod spectral_missing;
 
 use pyo3::exceptions::PyValueError;
 use pyo3::PyResult;

@@ -11,9 +11,12 @@ pub mod signal;
 use pyo3::prelude::*;
 
 use python::engine::FeatureEngine;
+use python::experimental as exp;
 use python::finance as fin;
+use python::finance_experimental as fin_exp;
 use python::result_types as rt;
 use python::signal as sig;
+use python::spectral_missing as sm;
 
 /// Library version (kept in sync with Cargo.toml / pyproject.toml).
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -151,6 +154,101 @@ fn _qstream(m: &Bound<'_, PyModule>) -> PyResult<()> {
 
     // Grouped execution.
     m.add_class::<FeatureEngine>()?;
+
+    // ========================================================================
+    // Phase 7 experimental features
+    // ========================================================================
+
+    // Result types
+    m.add_class::<exp::PyDecompositionResult>()?;
+    m.add_class::<exp::PyBispectrumResult>()?;
+    m.add_class::<exp::PyBicoherenceResult>()?;
+    m.add_class::<exp::PyCumulantResult>()?;
+    m.add_class::<fin_exp::PyEVTResult>()?;
+    m.add_class::<fin_exp::PyVarianceSwapResult>()?;
+
+    // Spectral heavy methods
+    m.add_class::<exp::MusicSpectrum>()?;
+    m.add_class::<exp::EspritSpectrum>()?;
+    m.add_class::<exp::MatrixPencilSpectrum>()?;
+    m.add_class::<exp::CaponSpectrum>()?;
+    m.add_class::<exp::PisarenkoSpectrum>()?;
+    m.add_class::<exp::MinimumNormSpectrum>()?;
+    m.add_class::<exp::PronySpectrum>()?;
+
+    // Decomposition
+    m.add_class::<exp::VmdDecomposition>()?;
+    m.add_class::<exp::EmdDecomposition>()?;
+    m.add_class::<exp::LmdDecomposition>()?;
+    m.add_class::<exp::MatchingPursuitDecomposition>()?;
+    m.add_class::<exp::SynchrosqueezingTransform>()?;
+
+    // Higher-order spectra
+    m.add_class::<exp::BispectrumAnalysis>()?;
+    m.add_class::<exp::BicoherenceAnalysis>()?;
+    m.add_class::<exp::HigherOrderCumulants>()?;
+
+    // Time-frequency
+    m.add_class::<exp::StockwellTransform>()?;
+    m.add_class::<exp::ReassignedSpectrogram>()?;
+    m.add_class::<exp::ConstantQTransform>()?;
+    m.add_class::<exp::FractionalFourierTransform>()?;
+    m.add_class::<exp::WignerVilleDistribution>()?;
+    m.add_class::<exp::ChirpZTransform>()?;
+    m.add_class::<exp::KurtogramAnalysis>()?;
+
+    // Wavelet extras
+    m.add_class::<exp::DualTreeCwt>()?;
+    m.add_class::<exp::EmpiricalWaveletTransform>()?;
+    m.add_class::<exp::TunableQWavelet>()?;
+    m.add_class::<exp::SureShrinkDenoise>()?;
+    m.add_class::<exp::StationaryWaveletDenoise>()?;
+    m.add_class::<exp::CrossWaveletTransform>()?;
+    m.add_class::<exp::WaveletPhaseSynchrony>()?;
+    m.add_class::<exp::WaveletRegression>()?;
+
+    // Heavy Kalman
+    m.add_class::<exp::ParticleFilter>()?;
+    m.add_class::<exp::EnsembleKalman>()?;
+    m.add_class::<exp::CubatureKalman>()?;
+
+    // Cycle
+    m.add_class::<exp::PhaseLockedLoop>()?;
+
+    // FastICA
+    m.add_class::<exp::FastICA>()?;
+
+    // Finance: tail risk
+    m.add_class::<fin_exp::EntropicVaR>()?;
+    m.add_class::<fin_exp::EVTGpdTailRisk>()?;
+    m.add_class::<fin_exp::JohnsonSUVaR>()?;
+    m.add_class::<fin_exp::SpectralRiskMeasure>()?;
+
+    // Finance: portfolio optimizers
+    m.add_class::<fin_exp::MaxDiversification>()?;
+    m.add_class::<fin_exp::ExponentiallyWeightedPortfolio>()?;
+
+    // Finance: realized volatility
+    m.add_class::<fin_exp::RealizedKernel>()?;
+    m.add_class::<fin_exp::TwoScaleRealizedVariance>()?;
+
+    // Finance: volatility derivatives
+    m.add_class::<fin_exp::FlemingOstdiekWhaleyVIX>()?;
+    m.add_class::<fin_exp::VandermeerVIX>()?;
+    m.add_class::<fin_exp::DemeterfiVarianceSwap>()?;
+
+    // Remaining spectral / filtering estimators (workbook completion).
+    m.add_class::<sm::CepstralAnalysis>()?;
+    m.add_class::<sm::DaniellPeriodogram>()?;
+    m.add_class::<sm::EigenvectorFrequencyEstimator>()?;
+    m.add_class::<sm::ModifiedCovarianceArSpectrum>()?;
+    m.add_class::<sm::MultipleCoherence>()?;
+    m.add_class::<sm::MultivariateSpectralAnalysis>()?;
+    m.add_class::<sm::ParzenPeriodogram>()?;
+    m.add_class::<sm::PartialCoherence>()?;
+    m.add_class::<sm::SpectralEnvelope>()?;
+    m.add_class::<sm::WienerHopfFilter>()?;
+    m.add_class::<sm::ApesSpectrum>()?;
 
     Ok(())
 }

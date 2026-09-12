@@ -45,8 +45,15 @@ use crate::python::{chk, chk2, chk_pos, chk_slice};
 // Volatility
 // ---------------------------------------------------------------------------
 
-/// RiskMetrics-style EWMA volatility. `alpha` is the weight on the new squared
-/// return (`lambda = 1 - alpha`); the RiskMetrics daily default is alpha=0.06.
+/// RiskMetrics-style EWMA volatility.
+///
+/// ```text
+/// sigma_t^2 = lambda sigma_{t-1}^2 + (1 - lambda) r_t^2
+/// lambda = 1 - alpha
+/// ```
+///
+/// `alpha` is the weight on the new squared return; the RiskMetrics daily
+/// default is `alpha = 0.06`.
 #[pyclass(module = "qstream")]
 pub struct EwmaVolatility {
     inner: CoreEwmaVol,
@@ -89,6 +96,13 @@ impl EwmaVolatility {
 }
 
 /// GARCH(1,1) conditional volatility.
+///
+/// ```text
+/// sigma_t^2 = omega + alpha r_{t-1}^2 + beta sigma_{t-1}^2
+/// ```
+///
+/// Bollerslev GARCH(1,1): conditional variance from past shocks and past
+/// variance; the classic volatility-clustering model.
 #[pyclass(module = "qstream")]
 pub struct Garch {
     inner: CoreGarch,
@@ -173,20 +187,27 @@ macro_rules! scalar_period_indicator {
 scalar_period_indicator!(
     RealizedVolatility,
     CoreRealizedVol,
-    "Realized volatility: sqrt of summed squared returns over a window."
+    "Realized volatility.\n\n```text\nRV = sqrt( sum_t r_t^2 )\n```\n\nSum of squared returns over a rolling window (no mean removal)."
 );
 scalar_period_indicator!(
     RollingVolatility,
     CoreRollingVol,
-    "Rolling volatility: sample standard deviation of returns over a window."
+    "Rolling volatility.\n\n```text\nsigma = sqrt( sum_t (r_t - mean)^2 / (N-1) )\n```\n\nSample standard deviation of returns over a rolling window."
 );
 scalar_period_indicator!(
     RollingReturns,
     CoreRollingReturns,
-    "Rolling cumulative return over a window."
+    "Rolling cumulative return over a window.\n\n```text\nR = prod_t (1 + r_t) - 1\n```\n\nCompounded return of the last N observations."
 );
 
 /// EWMA of squared returns (variance), returned as volatility.
+///
+/// ```text
+/// v_t = (1 - alpha) r_t^2 + alpha v_{t-1}
+/// output = sqrt(v_t)
+/// ```
+///
+/// Exponentially-weighted moving average of squared returns.
 #[pyclass(module = "qstream")]
 pub struct EwmaVariance {
     inner: CoreEwmaVariance,
@@ -266,14 +287,20 @@ macro_rules! ohlc_indicator {
     };
 }
 
-ohlc_indicator!(GarmanKlass, CoreGarmanKlass, "Garman-Klass OHLC volatility.");
+ohlc_indicator!(GarmanKlass, CoreGarmanKlass, "Garman-Klass OHLC volatility.\n\n```text\nsigma^2 = 0.5 (ln(H/L))^2 - (2 ln 2 - 1) (ln(C/O))^2\n```\n\nOHLC range-based volatility estimator using open, high, low, close.");
 ohlc_indicator!(
     RogersSatchell,
     CoreRogersSatchell,
-    "Rogers-Satchell drift-independent OHLC volatility."
+    "Rogers-Satchell drift-independent OHLC volatility.\n\n```text\nsigma^2 = ln(H/C) ln(H/O) + ln(L/C) ln(L/O)\n```\n\nOHLC estimator that is insensitive to drift (trend)."
 );
 
 /// Parkinson high-low range volatility.
+///
+/// ```text
+/// sigma^2 = (1 / (4 ln 2)) * mean( (ln(H_t / L_t))^2 )
+/// ```
+///
+/// Range-based volatility estimator using only high and low prices.
 #[pyclass(module = "qstream")]
 pub struct Parkinson {
     inner: CoreParkinson,
@@ -306,6 +333,14 @@ impl Parkinson {
 // ---------------------------------------------------------------------------
 
 /// Corwin-Schultz high-low bid-ask spread estimator.
+///
+/// ```text
+/// S = 2 (e^{alpha} - 1) / (1 + e^{alpha})
+/// alpha = sqrt(2 beta) - sqrt(beta) / (3 - 2 sqrt(2)) - sqrt(gamma / (3 - 2 sqrt(2)))
+/// beta = E[(ln(H_t/L_t))^2], gamma = (ln(H_{t,t+1}/L_{t,t+1}))^2
+/// ```
+///
+/// Bid-ask spread from the high and low prices of two consecutive periods.
 #[pyclass(module = "qstream")]
 pub struct CorwinSchultz {
     inner: CoreCorwinSchultz,
@@ -333,6 +368,14 @@ impl CorwinSchultz {
 }
 
 /// Abdi-Ranaldo closing-price spread estimator.
+///
+/// ```text
+/// S = 2 sqrt( mean( (ln(C_t/M_t))^2 ) )
+/// M_t = (H_t + L_t) / 2
+/// ```
+///
+/// Bid-ask spread from the covariance of close and mid-price using only
+/// daily OHLC data.
 #[pyclass(module = "qstream")]
 pub struct AbdiRanaldo {
     inner: CoreAbdiRanaldo,
@@ -366,6 +409,14 @@ impl AbdiRanaldo {
 }
 
 /// Glosten-Milgrom quote/adverse-selection tracker.
+///
+/// ```text
+/// spread = ask - bid
+/// price_impact = spread * lambda     (adverse-selection cost)
+/// ```
+///
+/// Microstructure model of a market maker who updates quotes to cover
+/// adverse-selection costs from informed trading.
 #[pyclass(module = "qstream")]
 pub struct GlostenMilgrom {
     inner: CoreGlostenMilgrom,
@@ -404,6 +455,13 @@ impl GlostenMilgrom {
 // ---------------------------------------------------------------------------
 
 /// Historical Value-at-Risk over a rolling window (positive loss magnitude).
+///
+/// ```text
+/// VaR_p = -quantile_p(returns)
+/// ```
+///
+/// The loss that is exceeded with probability `p` (the `p`-th empirical
+/// quantile of the return distribution, negated).
 #[pyclass(module = "qstream")]
 pub struct ValueAtRisk {
     inner: CoreVaR,
@@ -443,6 +501,12 @@ impl ValueAtRisk {
 }
 
 /// Conditional VaR / Expected Shortfall over a rolling window.
+///
+/// ```text
+/// CVaR_p = -E[ r | r <= -VaR_p ]
+/// ```
+///
+/// Mean of losses beyond VaR; a coherent tail-risk measure.
 #[pyclass(module = "qstream")]
 pub struct ConditionalValueAtRisk {
     inner: CoreCVaR,
@@ -482,6 +546,13 @@ impl ConditionalValueAtRisk {
 }
 
 /// Cornish-Fisher modified VaR from rolling moments.
+///
+/// ```text
+/// z_cf = z + (z^2 - 1) S/6 + (z^3 - 3z) K/24 - (2z^3 - 5z) S^2/36
+/// VaR = -(mu + sigma z_cf)
+/// ```
+///
+/// Adjusts the normal quantile `z` for skewness `S` and excess kurtosis `K`.
 #[pyclass(module = "qstream")]
 pub struct CornishFisherVaR {
     inner: CoreCornishFisher,
@@ -521,6 +592,14 @@ impl CornishFisherVaR {
 }
 
 /// Conditional Drawdown-at-Risk from a rolling wealth curve.
+///
+/// ```text
+/// DD_t = peak_t - wealth_t
+/// CDaR = E[ DD | DD >= VaR(DD) ]
+/// ```
+///
+/// Average of the largest drawdowns over a rolling window; a tail-risk
+/// measure of drawdown depth.
 #[pyclass(module = "qstream")]
 pub struct ConditionalDrawdownAtRisk {
     inner: CoreCDaR,
@@ -564,6 +643,13 @@ impl ConditionalDrawdownAtRisk {
 }
 
 /// Rachev ratio (upper-tail reward vs lower-tail risk).
+///
+/// ```text
+/// Rachev = CVaR_p( -r ) / CVaR_p( r )
+/// ```
+///
+/// Expected tail gain divided by expected tail loss (reward-to-risk using
+/// both distribution tails).
 #[pyclass(module = "qstream")]
 pub struct RachevRatio {
     inner: CoreRachev,
@@ -614,6 +700,13 @@ fn period_to_lambda(period: usize) -> PyResult<f64> {
 }
 
 /// Fama-French three-factor model (market, SMB, HML).
+///
+/// ```text
+/// r - rf = alpha + b1 (rm - rf) + b2 SMB + b3 HML + e
+/// ```
+///
+/// Online regression of excess asset return on market, size (SMB), and value
+/// (HML) factors; returns `FactorResult(alpha, betas, r2, residual_variance)`.
 #[pyclass(module = "qstream")]
 pub struct FamaFrench3 {
     inner: CoreFactorModel,
@@ -653,6 +746,13 @@ impl FamaFrench3 {
 }
 
 /// Fama-French five-factor model (market, SMB, HML, RMW, CMA).
+///
+/// ```text
+/// r - rf = alpha + b1 (rm - rf) + b2 SMB + b3 HML + b4 RMW + b5 CMA + e
+/// ```
+///
+/// Adds profitability (RMW) and investment (CMA) factors to the three-factor
+/// model; returns `FactorResult(alpha, betas, r2, residual_variance)`.
 #[pyclass(module = "qstream")]
 pub struct FamaFrench5 {
     inner: CoreFactorModel,
@@ -693,6 +793,13 @@ impl FamaFrench5 {
 }
 
 /// Carhart four-factor model (market, SMB, HML, momentum).
+///
+/// ```text
+/// r - rf = alpha + b1 (rm - rf) + b2 SMB + b3 HML + b4 MOM + e
+/// ```
+///
+/// Adds the momentum factor (MOM) to the three-factor model; returns
+/// `FactorResult(alpha, betas, r2, residual_variance)`.
 #[pyclass(module = "qstream")]
 pub struct Carhart4 {
     inner: CoreFactorModel,
@@ -732,6 +839,13 @@ impl Carhart4 {
 }
 
 /// Generic N-factor online regression.
+///
+/// ```text
+/// r - rf = alpha + sum_{i=1}^{N} beta_i F_i + e
+/// ```
+///
+/// Online least-squares regression of excess return on `N` supplied factors;
+/// returns `FactorResult(alpha, betas, r2, residual_variance)`.
 #[pyclass(module = "qstream")]
 pub struct MultiFactorModel {
     inner: CoreFactorModel,
@@ -768,6 +882,13 @@ impl MultiFactorModel {
 }
 
 /// Treynor-Mazuy market-timing model.
+///
+/// ```text
+/// r - rf = alpha + beta (rm - rf) + gamma (rm - rf)^2 + e
+/// ```
+///
+/// Quadratic market-timing regression; `gamma > 0` indicates positive timing
+/// ability.
 #[pyclass(module = "qstream")]
 pub struct TreynorMazuy {
     inner: CoreTreynorMazuy,
@@ -806,6 +927,13 @@ impl TreynorMazuy {
 }
 
 /// CAPM alpha/beta via rolling excess-return regression.
+///
+/// ```text
+/// r_a - rf = alpha + beta (r_m - rf) + e
+/// beta = Cov(r_a, r_m) / Var(r_m)
+/// ```
+///
+/// Capital Asset Pricing Model regression; returns `alpha`, `beta`, and `r2`.
 #[pyclass(module = "qstream")]
 pub struct Capm {
     inner: CoreCapm,
@@ -845,6 +973,12 @@ impl Capm {
 }
 
 /// Jensen's alpha (intercept of excess-return regression).
+///
+/// ```text
+/// alpha = E[r_a] - rf - beta (E[r_m] - rf)
+/// ```
+///
+/// Risk-adjusted excess return; the intercept of the CAPM regression.
 #[pyclass(module = "qstream")]
 pub struct JensenAlpha {
     inner: CoreCapm,
@@ -880,6 +1014,12 @@ impl JensenAlpha {
 }
 
 /// Rolling beta of an asset versus a benchmark.
+///
+/// ```text
+/// beta = Cov(r_a, r_m) / Var(r_m)
+/// ```
+///
+/// Windowed market sensitivity (systematic risk) of an asset.
 #[pyclass(module = "qstream")]
 pub struct RollingBeta {
     inner: CoreRollingBeta,
@@ -909,6 +1049,12 @@ impl RollingBeta {
 }
 
 /// Rolling-window beta stability (standard deviation of the rolling beta).
+///
+/// ```text
+/// stability = std( beta_t ) over a stability window
+/// ```
+///
+/// Measures how much the asset's market sensitivity varies through time.
 #[pyclass(module = "qstream")]
 pub struct RollingBetaStability {
     inner: CoreBetaStability,
@@ -942,6 +1088,12 @@ impl RollingBetaStability {
 }
 
 /// Tracking error: rolling standard deviation of active returns.
+///
+/// ```text
+/// TE = std( r_a - r_b )
+/// ```
+///
+/// Volatility of the return difference between an asset and its benchmark.
 #[pyclass(module = "qstream")]
 pub struct TrackingError {
     inner: CoreTrackingError,
@@ -971,6 +1123,12 @@ impl TrackingError {
 // ---------------------------------------------------------------------------
 
 /// Rolling Sharpe ratio.
+///
+/// ```text
+/// Sharpe = (mean(r) - rf) / std(r)
+/// ```
+///
+/// Excess return per unit of total risk over a rolling window.
 #[pyclass(module = "qstream")]
 pub struct SharpeRatio {
     inner: CoreSharpe,
@@ -1008,6 +1166,12 @@ impl SharpeRatio {
 }
 
 /// Sortino ratio with a minimum acceptable return (MAR).
+///
+/// ```text
+/// Sortino = (mean(r) - MAR) / sqrt( mean( min(0, r - MAR)^2 ) )
+/// ```
+///
+/// Excess return per unit of downside deviation (punishes only losses).
 #[pyclass(module = "qstream")]
 pub struct SortinoRatio {
     inner: CoreSortino,
@@ -1049,6 +1213,12 @@ impl SortinoRatio {
 }
 
 /// Gain-loss (Bernardo-Ledoit) ratio.
+///
+/// ```text
+/// GLR = sum( max(0, r) ) / sum( max(0, -r) )
+/// ```
+///
+/// Ratio of total positive returns to total negative returns.
 #[pyclass(module = "qstream")]
 pub struct GainLossRatio {
     inner: CoreGainLoss,
@@ -1084,6 +1254,12 @@ impl GainLossRatio {
 }
 
 /// Omega ratio above a threshold.
+///
+/// ```text
+/// Omega(tau) = sum( max(0, r - tau) ) / sum( max(0, tau - r) )
+/// ```
+///
+/// Gain-to-loss ratio measured relative to a threshold `tau`.
 #[pyclass(module = "qstream")]
 pub struct OmegaRatio {
     inner: CoreOmega,
@@ -1121,6 +1297,13 @@ impl OmegaRatio {
 }
 
 /// Up/down capture ratios versus a benchmark.
+///
+/// ```text
+/// up_capture = mean(r_a | r_b > 0) / mean(r_b | r_b > 0)
+/// down_capture = mean(r_a | r_b < 0) / mean(r_b | r_b < 0)
+/// ```
+///
+/// Asset participation in benchmark up and down moves, respectively.
 #[pyclass(module = "qstream")]
 pub struct CaptureRatios {
     inner: CoreCapture,
@@ -1148,6 +1331,13 @@ impl CaptureRatios {
 }
 
 /// Conditional Sharpe ratio (asset Sharpe conditioned on benchmark direction).
+///
+/// ```text
+/// up_sharpe = Sharpe(r_a | r_b > 0)
+/// down_sharpe = Sharpe(r_a | r_b < 0)
+/// ```
+///
+/// Performance split by benchmark up/down regime.
 #[pyclass(module = "qstream")]
 pub struct ConditionalSharpe {
     inner: CoreCondSharpe,
@@ -1186,6 +1376,13 @@ impl ConditionalSharpe {
 }
 
 /// Deflated Sharpe Ratio (Bailey & Lopez de Prado).
+///
+/// ```text
+/// DSR = Phi( (SR - E[max SR]) / sigma(SR) )
+/// ```
+///
+/// Adjusts the Sharpe ratio for the selection bias of trying many strategy
+/// variants (multiple-testing correction).
 #[pyclass(module = "qstream")]
 pub struct DeflatedSharpeRatio {
     inner: CoreDeflatedSharpe,
@@ -1224,6 +1421,13 @@ impl DeflatedSharpeRatio {
 }
 
 /// Lo (2002) autocorrelation-adjusted Sharpe ratio.
+///
+/// ```text
+/// SR_adj = SR * sqrt( (1 + 2 sum_k (1 - k/N) rho_k) / N )
+/// ```
+///
+/// Corrects the annualized Sharpe ratio for serial correlation `rho_k` in
+/// returns.
 #[pyclass(module = "qstream")]
 pub struct LoAutocorrelationSharpe {
     inner: CoreLoSharpe,
@@ -1269,6 +1473,13 @@ impl LoAutocorrelationSharpe {
 // ---------------------------------------------------------------------------
 
 /// Weighted portfolio return stream.
+///
+/// ```text
+/// r_p = sum_i w_i r_i
+/// ```
+///
+/// Dot product of asset returns and weights; tracks cumulative and mean
+/// return.
 #[pyclass(module = "qstream")]
 pub struct PortfolioReturns {
     inner: CorePortfolioReturns,
@@ -1303,6 +1514,12 @@ impl PortfolioReturns {
 }
 
 /// Aggregate portfolio duration.
+///
+/// ```text
+/// D_p = sum_i w_i D_i
+/// ```
+///
+/// Weighted average of asset durations.
 #[pyclass(module = "qstream")]
 pub struct PortfolioDuration {
     inner: CorePortfolioDuration,
@@ -1329,6 +1546,12 @@ impl PortfolioDuration {
 }
 
 /// EWMA multivariate covariance matrix.
+///
+/// ```text
+/// Sigma_t = lambda Sigma_{t-1} + (1 - lambda) r_t r_t^T
+/// ```
+///
+/// RiskMetrics exponentially-weighted covariance matrix of `n_assets` returns.
 #[pyclass(module = "qstream")]
 pub struct EwmaCovarianceMatrix {
     inner: CoreEwmaCov,
@@ -1375,6 +1598,14 @@ impl EwmaCovarianceMatrix {
 }
 
 /// Component & marginal VaR from a streaming EWMA covariance.
+///
+/// ```text
+/// VaR = z * sqrt( w^T Sigma w )
+/// marginal_i = z * (Sigma w)_i / sqrt( w^T Sigma w )
+/// component_i = w_i * marginal_i
+/// ```
+///
+/// Decomposes total VaR into per-asset marginal and component contributions.
 #[pyclass(module = "qstream")]
 pub struct ComponentMarginalVaR {
     inner: CoreComponentVaR,
@@ -1412,6 +1643,12 @@ impl ComponentMarginalVaR {
 }
 
 /// Equal-risk-contribution (risk parity) weights from a covariance matrix.
+///
+/// ```text
+/// w_i * (Sigma w)_i = w_j * (Sigma w)_j   for all i, j
+/// ```
+///
+/// Iteratively reweights so every asset contributes equal risk.
 #[pyfunction]
 #[pyo3(signature = (covariance, n_assets, iters = 200))]
 pub fn risk_parity_weights(
@@ -1433,6 +1670,13 @@ pub fn risk_parity_weights(
 // ---------------------------------------------------------------------------
 
 /// Black-Scholes implied volatility (Newton-Raphson with bisection safeguard).
+///
+/// ```text
+/// sigma* = root of  BS(sigma) - market_price = 0
+/// BS(sigma) = spot N(d1) - K e^{-rT} N(d2)
+/// ```
+///
+/// Backs out the volatility implied by an observed option price.
 #[pyclass(module = "qstream")]
 pub struct ImpliedVolatility {
     inner: deriv::ImpliedVolatility,
@@ -1468,6 +1712,11 @@ impl ImpliedVolatility {
 }
 
 /// Black-Scholes European option price (convenience function).
+///
+/// ```text
+/// C = S N(d1) - K e^{-rT} N(d2)
+/// P = K e^{-rT} N(-d2) - S N(-d1)
+/// ```
 #[pyfunction]
 #[pyo3(signature = (spot, strike, ttm, rate, sigma, is_call = true))]
 pub fn bs_price(spot: f64, strike: f64, ttm: f64, rate: f64, sigma: f64, is_call: bool) -> PyResult<f64> {
@@ -1478,6 +1727,14 @@ pub fn bs_price(spot: f64, strike: f64, ttm: f64, rate: f64, sigma: f64, is_call
 }
 
 /// VIX futures term-structure shape from one snapshot.
+///
+/// ```text
+/// slope = (F(T2) - F(T1)) / (T2 - T1)
+/// contango = F(T) - spot
+/// curvature = second derivative of the futures curve
+/// ```
+///
+/// Contango/backwardation and slope of the VIX futures curve.
 #[pyclass(module = "qstream")]
 pub struct VixTermStructure;
 
@@ -1504,6 +1761,13 @@ impl VixTermStructure {
 }
 
 /// Realized-variance tracker for variance swaps.
+///
+/// ```text
+/// RV = sum_t r_t^2
+/// pnl = notional * (RV - strike_variance)
+/// ```
+///
+/// Tracks realized variance for a variance-swap payoff.
 #[pyclass(module = "qstream")]
 pub struct VarianceSwap {
     inner: CoreVarianceSwap,
