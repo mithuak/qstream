@@ -1,0 +1,35 @@
+[build-system]
+requires = ["maturin>=1.7,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "qstream"
+version = "0.1.0"
+description = "Low-latency finance + signal-processing feature library (Rust core, Python API). No NumPy/pandas/SciPy required."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT OR Apache-2.0" }
+authors = [{ name = "qstream" }]
+keywords = ["finance", "quant", "signal-processing", "streaming", "low-latency", "rust"]
+classifiers = [
+    "Programming Language :: Rust",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Programming Language :: Python :: 3",
+    "Intended Audience :: Financial and Insurance Industry",
+    "Topic :: Office/Business :: Financial :: Investment",
+]
+# Runtime intentionally has NO NumPy/pandas/SciPy/Numba dependency.
+dependencies = []
+
+[project.optional-dependencies]
+# Development-only extras (never required at runtime).
+dev = ["pytest>=8.0"]
+
+[tool.maturin]
+python-source = "python"
+module-name = "qstream._qstream"
+features = ["pyo3/extension-module"]
+strip = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

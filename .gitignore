@@ -1,0 +1,21 @@
+# Rust / cargo
+target/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+.pytest_cache/
+python/qstream/_qstream*.so
+
+# Built wheels & sdist artifacts
+dist/
+*.whl
+
+# IDE / tool caches
+.idea/
+.vscode/
+.DS_Store
+.commandcode/
