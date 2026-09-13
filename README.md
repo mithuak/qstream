@@ -16,6 +16,9 @@ Built from `design.md`; the function catalog mirrors the companion workbook
 `low_latency_finance_signal_api.xlsx`. **Every function listed in the workbook
 is implemented**, including all heavy/experimental Phase-7 items.
 
+The [documentation site](docs/README.md) includes a Python quickstart,
+streaming and cadence guides, a browsable API catalog, and a workbook map.
+
 ## Install
 
 ```bash
